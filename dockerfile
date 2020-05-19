@@ -4,7 +4,7 @@ RUN chmod 777 -R /home
 RUN apt-get update -y --fix-missing
 ENV LDAP_SEREVER 172.17.0.2
 #172.17.0.2
-ENV LDAP_BASE_DN #dc=jc,dc=be
+ENV LDAP_BASE_DN dc=jc,dc=be
 #dc=jc,dc=be
 RUN apt-get install -y vim
 RUN mkdir /var/run/sshd
