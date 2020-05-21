@@ -23,5 +23,7 @@ Download preconfigured ldap-server.tar and load it docker images, ensrue it is r
 
 docker load --input ldap-server-working.tar
 docker run -it --privileged  ldap-server-working:latest
+in the terminal restart slapd 
+services slapd restart
 
 (DOCKER FILE WORK IN PROGRESS)
