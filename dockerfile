@@ -1,64 +1,44 @@
 FROM ubuntu
 USER root
-
-# SET ENVIRONMENT VARIABLES FOR CONFIG SETTINGS
-ENV AUTH_CONFIG=$AUTH_CONFIG
-ENV DOMAIN_NAME=$DOMAIN_NAME
-ENV NAME_SERVER_IP=$NAME_SERVER_IP
-ENV NAME_SERVER_FIRST=$NAME_SERVER_FIRST
-ENV NAME_SERVER=$NAME_SERVER
-ENV MOUNT_PATH=$MOUNT_PATH
-
-# GENERIC TOOLS AND UPDATES
 RUN chmod 777 -R /home
 RUN apt-get update -y --fix-missing
+ENV LDAP_SEREVER 172.17.0.2
+#172.17.0.2
+ENV LDAP_BASE_DN dc=jc,dc=be
+#dc=jc,dc=be
 RUN apt-get install -y vim
-
-# NIS INSTALLATION 
-RUN	 DEBIAN_FRONTEND=noninteractive apt-get install -y nis network-manager portmap
-RUN apt-get install -y nfs-common
-
-
-# SSH INSTALLATION
-RUN apt-get install -y openssh-server
 RUN mkdir /var/run/sshd
-RUN mkdir /root/.ssh
+#----------------------------------------------------------
+#--- SSH
+#----------------------------------------------------------
+RUN apt-get install -y sudo passwd openssh-server
 RUN echo 'root:root' |chpasswd && adduser root sudo
-RUN echo "X11UseLocalhost no" >> /etc/ssh/sshd_config
 RUN sed -ri 's/^#?PermitRootLogin\s+.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-RUN sed -ri 's/#UsePAM yes/UsePAM yes/g' /etc/ssh/sshd_config
+RUN sed -ri 's/^#PubkeyAuthentication\s+.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+RUN sed -ri 's/^#PasswordAuthentication\s+.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+RUN sed -ri 's/^#UsePAM\s+.*/UsePAM yes/' /etc/ssh/sshd_config
+RUN sed -ri 's/^#UseLogin\s+.*/UseLogin yes/' /etc/ssh/sshd_config
+#RUN mkdir -p /var/run/sshd
 
-# SET HOST DETAILS FOR NIS
-RUN echo "$NAME_SERVER_IP  $NAME_SERVER_FIRST $NAME_SERVER" >> /etc/hosts
+#----------------------------------------------------------
+#--- LDAP
+#----------------------------------------------------------
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -qq libnss-ldap libpam-ldap ldap-utils nscd
+#ADD ldap-auth-config /etc/auth-client-config/profile.d/ldap-auth-config
+RUN echo "base $LDAP_BASE_DN"                   > /etc/ldap.conf ;\
+    echo "uri ldap://$LDAP_SEREVER/"           >> /etc/ldap.conf ;\
+    echo "ldap_version 3"                      >> /etc/ldap.conf ;\
+    echo "rootbinddn cn=admin,$LDAP_BASE_DN" >> /etc/ldap.conf ;\
+    echo "pam_password md5"                    >> /etc/ldap.conf    
+RUN echo "session required pam_mkhomedir.so skel=/etc/skel umask=0077"   >> /etc/pam.d/common-auth
 
-# NIS SSH CONFIGURATIONS
-RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+RUN sed -i 's/\(passwd:.*$\)/\1 ldap/' /etc/nsswitch.conf
+RUN sed -i 's/\(group:.*$\)/\1 ldap/' /etc/nsswitch.conf
+RUN sed -i 's/\(shadow:.*$\)/\1 ldap/' /etc/nsswitch.conf
+RUN sed -i 's/\(netgroup\)/\1 #/' /etc/nsswitch.conf
+RUN echo "netgroup:       ldap" >>/etc/nsswitch.conf
 
-# Create a default home directory
-RUN echo "session    required   pam_mkhomedir.so skel=/mnt/site/etc/skel/ umask=0022 silent" >> /etc/pam.d/common-account
-
-# NIS CONFIGURATIONS
-
-RUN echo "$DOMAIN_NAME" > /etc/defaultdomain \
-	&& echo "rpcbind: $NAME_SERVER" >> /etc/hosts.allow \
-	&& echo "rpcbind: $DOMAIN_NAME" >> /etc/hosts.allow \
-	&& echo "+::::::" >> /etc/passwd \
-	&& echo "+:::" >> /etc/group \
-	&& echo "+::::::::" >> /etc/shadow
-
-
-RUN sed -i 's/\(passwd:.*$\)/\1 nis/' /etc/nsswitch.conf
-RUN sed -i 's/\(group:.*$\)/\1 nis/' /etc/nsswitch.conf
-RUN sed -i 's/\(shadow:.*$\)/\1 nis/' /etc/nsswitch.conf
-RUN sed -i 's/\(hosts:.*$\)/\1 nis/' /etc/nsswitch.conf
-RUN echo "${DOMAIN_NAME}" > /etc/defaultdomain
-
-# YP CONCFIGURATION
-RUN echo "domain ${DOMAIN_NAME} server ${NAME_SERVER}" >> /etc/yp.conf
-RUN domainname $DOMAIN_NAME
-
-# RESTART NIS SERVICES WHEN CONTAINER STARTS
-COPY entry-point-nis-config.sh /usr/local/bin/
+RUN service nscd restart
 EXPOSE 22
-ENTRYPOINT ["entry-point-nis-config.sh"]
 
+CMD    ["/usr/sbin/sshd", "-D"]
