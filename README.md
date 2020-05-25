@@ -9,8 +9,13 @@ Download the docker file
 
 docker build -t ldap-client-local-build .
 
-docker run -d --privileged -p 1235:22 ldap-client-local-build
 
+docker run --env-file .\LDAP.env -d --privileged=TRUE -P -u 0 ldap-client-local-build
+
+Sample LDAP.ENV file content
+
+LDAP_BASE_DN=dc=jc,dc=be
+LDAP_SEREVER=172.17.0.2
 
 Assumption:
 Open LDAP Server is already running , in the current scenario its runnin with the IP 172.17.0.2 and LDAP_BASE : dc=jc,dc=be
@@ -26,4 +31,4 @@ docker run -it --privileged  ldap-server-working:latest
 in the terminal restart slapd 
 services slapd restart
 
-(DOCKER FILE WORK IN PROGRESS)
+(DOCKER FILE for the server WORK IN PROGRESS)
